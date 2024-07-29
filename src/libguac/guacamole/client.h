@@ -46,6 +46,7 @@
 #include <time.h>
 
 struct guac_client {
+    char* name;
 
     /**
      * The guac_socket structure to be used to communicate with all non-pending
@@ -659,13 +660,13 @@ int guac_client_get_processing_lag(guac_client* client);
  * Sends a request to the owner of the given guac_client for parameters required
  * to continue the connection started by the client. The function returns zero
  * on success or non-zero on failure.
- * 
+ *
  * @param client
  *     The client where additional connection parameters are required.
- * 
+ *
  * @param required
  *     The NULL-terminated array of required parameters.
- * 
+ *
  * @return
  *     Zero on success, non-zero on failure.
  */
@@ -818,12 +819,12 @@ void guac_client_stream_webp(guac_client* client, guac_socket* socket,
  * Returns whether the owner of the given client supports the "msg"
  * instruction, returning non-zero if the client owner does support the
  * instruction, or zero if the owner does not.
- * 
+ *
  * @param client
  *     The Guacamole client whose owner should be checked for supporting
  *     the "msg" instruction.
- * 
- * @return 
+ *
+ * @return
  *     Non-zero if the owner of the given client supports the "msg"
  *     instruction, zero otherwise.
  */
@@ -833,12 +834,12 @@ int guac_client_owner_supports_msg(guac_client* client);
  * Returns whether the owner of the given client supports the "required"
  * instruction, returning non-zero if the client owner does support the
  * instruction, or zero if the owner does not.
- * 
+ *
  * @param client
  *     The Guacamole client whose owner should be checked for supporting
  *     the "required" instruction.
- * 
- * @return 
+ *
+ * @return
  *     Non-zero if the owner of the given client supports the "required"
  *     instruction, zero otherwise.
  */
@@ -855,7 +856,7 @@ int guac_client_owner_supports_required(guac_client* client);
  *
  * @param joiner
  *     The Guacamole User who joined the connection.
- * 
+ *
  * @return
  *     Zero if the notification to the owner was sent successfully, or non-zero
  *     if an error occurred.
@@ -873,7 +874,7 @@ int guac_client_owner_notify_join(guac_client* client, guac_user* joiner);
  *
  * @param quitter
  *     The Guacamole User who left the connection.
- * 
+ *
  * @return
  *     Zero if the notification to the owner was sent successfully, or non-zero
  *     if an error occurred.

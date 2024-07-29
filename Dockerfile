@@ -28,7 +28,8 @@ ARG ALPINE_BASE_IMAGE=3.18
 FROM alpine:${ALPINE_BASE_IMAGE} AS builder
 
 # FreeRDP version (default to version 3)
-ARG FREERDP_VERSION=3
+# MBT: No video with FreeRDP 3, so default to version 2
+ARG FREERDP_VERSION=2
 
 # Install build dependencies
 RUN apk add --no-cache                \
@@ -53,6 +54,8 @@ RUN apk add --no-cache                \
         sdl2-dev                      \
         sdl2_ttf-dev                  \
         util-linux-dev                \
+        ffmpeg-dev                    \
+        libvorbis-dev                 \
         webkit2gtk-dev
 
 # Copy source to container for sake of build
@@ -178,7 +181,7 @@ ARG PREFIX_DIR=/opt/guacamole
 # Runtime environment
 ENV LC_ALL=C.UTF-8
 ENV LD_LIBRARY_PATH=${PREFIX_DIR}/lib
-ENV GUACD_LOG_LEVEL=info
+ENV GUACD_LOG_LEVEL=trace
 
 # Copy build artifacts into this stage
 COPY --from=builder ${PREFIX_DIR} ${PREFIX_DIR}
@@ -213,7 +216,7 @@ EXPOSE 4822
 
 # Start guacd, listening on port 0.0.0.0:4822
 #
-# Note the path here MUST correspond to the value specified in the 
+# Note the path here MUST correspond to the value specified in the
 # PREFIX_DIR build argument.
 #
 CMD /opt/guacamole/sbin/guacd -b 0.0.0.0 -L $GUACD_LOG_LEVEL -f

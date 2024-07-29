@@ -30,6 +30,8 @@
 #include <guacamole/user.h>
 #include <winpr/nt.h>
 
+#include <mbt_tracker_file_transfer.h>
+
 #include <stdlib.h>
 
 /**
@@ -113,6 +115,18 @@ int guac_rdp_upload_file_handler(guac_user* user, guac_stream* stream,
         return 0;
     }
 
+    { // MBT CHANGE
+        stream->mbt_tracker = malloc(sizeof(mbt_file_transfer_tracker_entry));
+        *(mbt_file_transfer_tracker_entry*)stream->mbt_tracker = (mbt_file_transfer_tracker_entry){
+            .filename = malloc(strlen(file_path) + 1),
+            .size = 0,
+            .username = user->info.name,
+            .direction = UPLOAD,
+            .connection_name = user->client->name
+        };
+        strcpy(((mbt_file_transfer_tracker_entry*)stream->mbt_tracker)->filename, file_path);
+    }
+
     /* Init upload status */
     guac_rdp_upload_status* upload_status = guac_mem_alloc(sizeof(guac_rdp_upload_status));
     upload_status->offset = 0;
@@ -166,6 +180,10 @@ int guac_rdp_upload_blob_handler(guac_user* user, guac_stream* stream,
         data += bytes_written;
         length -= bytes_written;
 
+        { // MBT CHANGE
+            mbt_file_transfer_tracker_entry* tracker = (mbt_file_transfer_tracker_entry*)stream->mbt_tracker;
+            tracker->size += bytes_written;
+        }
     }
 
     guac_protocol_send_ack(user->socket, stream, "OK (DATA RECEIVED)",
@@ -187,7 +205,21 @@ int guac_rdp_upload_end_handler(guac_user* user, guac_stream* stream) {
         guac_protocol_send_ack(user->socket, stream, "FAIL (NO FS)",
                 GUAC_PROTOCOL_STATUS_SERVER_ERROR);
         guac_socket_flush(user->socket);
+
+        { // MBT CHANGE
+            free(((mbt_file_transfer_tracker_entry*)stream->mbt_tracker)->filename);
+            free(stream->mbt_tracker);
+        }
+
         return 0;
+    }
+
+    { // MBT CHANGE
+        mbt_file_transfer_tracker_entry* tracker = (mbt_file_transfer_tracker_entry*)stream->mbt_tracker;
+        mbt_report_file_transfer_tracker(tracker);
+        free(tracker->filename);
+        free(stream->mbt_tracker);
+        stream->mbt_tracker = NULL;
     }
 
     /* Close file */
@@ -246,6 +278,18 @@ int guac_rdp_upload_put_handler(guac_user* user, guac_object* object,
     guac_rdp_upload_status* upload_status = guac_mem_alloc(sizeof(guac_rdp_upload_status));
     upload_status->offset = 0;
     upload_status->file_id = file_id;
+
+    { // MBT CHANGE
+        stream->mbt_tracker = malloc(sizeof(mbt_file_transfer_tracker_entry));
+        *(mbt_file_transfer_tracker_entry*)stream->mbt_tracker = (mbt_file_transfer_tracker_entry){
+            .filename = malloc(strlen(name) + 1),
+            .size = 0,
+            .username = user->info.name,
+            .direction = UPLOAD,
+            .connection_name = user->client->name
+        };
+        strcpy(((mbt_file_transfer_tracker_entry*)stream->mbt_tracker)->filename, name);
+    }
 
     /* Allocate stream, init for file upload */
     stream->data = upload_status;

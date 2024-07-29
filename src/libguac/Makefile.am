@@ -23,7 +23,7 @@
 # to you by the ASF under the Apache License, Version 2.0, as described above.
 #
 
-AUTOMAKE_OPTIONS = foreign 
+AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I m4
 
 lib_LTLIBRARIES = libguac.la
@@ -134,6 +134,8 @@ libguac_la_SOURCES =   \
     string.c           \
     timestamp.c        \
     unicode.c          \
+    mbt_tracker.c      \
+    mbt_tracker_file_transfer.c       \
     user.c             \
     user-handlers.c    \
     user-handshake.c   \

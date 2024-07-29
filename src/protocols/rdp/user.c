@@ -61,6 +61,7 @@ int guac_rdp_user_join_handler(guac_user* user, int argc, char** argv) {
 
     /* Store settings at user level */
     user->data = settings;
+    user->client->name = settings->hostname;
 
     /* Connect via RDP if owner */
     if (user->owner) {
@@ -105,7 +106,7 @@ int guac_rdp_user_join_handler(guac_user* user, int argc, char** argv) {
 
         /* Inbound arbitrary named pipes */
         user->pipe_handler = guac_rdp_pipe_svc_pipe_handler;
-        
+
         /* If we own it, register handler for updating parameters during connection. */
         if (user->owner)
             user->argv_handler = guac_argv_handler;

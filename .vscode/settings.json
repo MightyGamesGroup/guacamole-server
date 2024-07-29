@@ -1,0 +1,24 @@
+{
+	"files.associations": {
+		"mbt_logger.h": "c",
+		"stream-types.h": "c",
+		"user-fntypes.h": "c",
+		"ssh.h": "c",
+		"log.h": "c",
+		"time.h": "c",
+		"limits.h": "c",
+		"mbt_tracker.h": "c",
+		"mbt_tracker_file_transfer.h": "c",
+		"stdio.h": "c",
+		"array": "c",
+		"string_view": "c",
+		"initializer_list": "c",
+		"utility": "c",
+		"client.h": "c",
+		"stdlib.h": "c"
+	},
+	"cSpell.words": [
+		"GUAC",
+		"guacd"
+	]
+}

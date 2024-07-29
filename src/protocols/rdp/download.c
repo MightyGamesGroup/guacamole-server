@@ -35,6 +35,8 @@
 #include <winpr/nt.h>
 #include <winpr/shell.h>
 
+#include <mbt_tracker_file_transfer.h>
+
 #include <stdlib.h>
 
 int guac_rdp_download_ack_handler(guac_user* user, guac_stream* stream,
@@ -65,6 +67,10 @@ int guac_rdp_download_ack_handler(guac_user* user, guac_stream* stream,
         /* If bytes read, send as blob */
         if (bytes_read > 0) {
             download_status->offset += bytes_read;
+            { // MBT CHANGE
+                mbt_file_transfer_tracker_entry* tracker = (mbt_file_transfer_tracker_entry*)stream->mbt_tracker;
+                tracker->size += bytes_read;
+            }
             guac_protocol_send_blob(user->socket, stream,
                     buffer, bytes_read);
         }
@@ -74,6 +80,14 @@ int guac_rdp_download_ack_handler(guac_user* user, guac_stream* stream,
             guac_protocol_send_end(user->socket, stream);
             guac_user_free_stream(user, stream);
             guac_mem_free(download_status);
+
+            { // MBT CHANGE
+                mbt_file_transfer_tracker_entry* tracker = (mbt_file_transfer_tracker_entry*)stream->mbt_tracker;
+                mbt_report_file_transfer_tracker(tracker);
+                free(tracker->filename);
+                free(stream->mbt_tracker);
+                stream->mbt_tracker = NULL;
+            }
         }
 
         /* Otherwise, fail stream */
@@ -140,6 +154,18 @@ int guac_rdp_download_get_handler(guac_user* user, guac_object* object,
         stream->ack_handler = guac_rdp_ls_ack_handler;
         stream->data = ls_status;
 
+        { // MBT CHANGE
+            stream->mbt_tracker = malloc(sizeof(mbt_file_transfer_tracker_entry));
+            *(mbt_file_transfer_tracker_entry*)stream->mbt_tracker = (mbt_file_transfer_tracker_entry){
+                .filename = malloc(strlen(name) + 1),
+                .size = 0,
+                .username = user->info.name,
+                .direction = DOWNLOAD,
+                .connection_name = user->client->name
+            };
+            strcpy(((mbt_file_transfer_tracker_entry*)stream->mbt_tracker)->filename, name);
+        }
+
         /* Init JSON object state */
         guac_common_json_begin_object(user, stream,
                 &ls_status->json_state);
@@ -162,6 +188,18 @@ int guac_rdp_download_get_handler(guac_user* user, guac_object* object,
         guac_stream* stream = guac_user_alloc_stream(user);
         stream->data = download_status;
         stream->ack_handler = guac_rdp_download_ack_handler;
+
+        { // MBT CHANGE
+            stream->mbt_tracker = malloc(sizeof(mbt_file_transfer_tracker_entry));
+            *(mbt_file_transfer_tracker_entry*)stream->mbt_tracker = (mbt_file_transfer_tracker_entry){
+                .filename = malloc(strlen(name) + 1),
+                .size = 0,
+                .username = user->info.name,
+                .direction = DOWNLOAD,
+                .connection_name = user->client->name
+            };
+            strcpy(((mbt_file_transfer_tracker_entry*)stream->mbt_tracker)->filename, name);
+        }
 
         /* Associate new stream with get request */
         guac_protocol_send_body(user->socket, object, stream,
@@ -218,6 +256,18 @@ void* guac_rdp_download_to_user(guac_user* user, void* data) {
 
         guac_user_log(user, GUAC_LOG_DEBUG, "%s: Initiating download "
                 "of \"%s\"", __func__, path);
+
+        { // MBT CHANGE
+            stream->mbt_tracker = malloc(sizeof(mbt_file_transfer_tracker_entry));
+            *(mbt_file_transfer_tracker_entry*)stream->mbt_tracker = (mbt_file_transfer_tracker_entry){
+                .filename = malloc(strlen(path) + 1),
+                .size = 0,
+                .username = user->info.name,
+                .direction = DOWNLOAD,
+                .connection_name = user->client->name
+            };
+            strcpy(((mbt_file_transfer_tracker_entry*)stream->mbt_tracker)->filename, path);
+        }
 
         /* Begin stream */
         guac_protocol_send_file(user->socket, stream,

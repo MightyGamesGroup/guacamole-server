@@ -20,6 +20,8 @@
 #include "common-ssh/sftp.h"
 #include "common-ssh/ssh.h"
 
+#include "mbt_tracker_file_transfer.h"
+
 #include <guacamole/client.h>
 #include <guacamole/mem.h>
 #include <guacamole/object.h>
@@ -314,6 +316,12 @@ static int guac_common_ssh_sftp_blob_handler(guac_user* user,
     /* Attempt write */
     if (libssh2_sftp_write(file, data, length) == length) {
         guac_user_log(user, GUAC_LOG_DEBUG, "%i bytes written", length);
+
+        { // MBT CHANGE
+            mbt_file_transfer_tracker_entry* entry = (mbt_file_transfer_tracker_entry*)stream->mbt_tracker;
+            entry->size += length;
+        }
+
         guac_protocol_send_ack(user->socket, stream, "SFTP: OK",
                 GUAC_PROTOCOL_STATUS_SUCCESS);
         guac_socket_flush(user->socket);
@@ -322,6 +330,11 @@ static int guac_common_ssh_sftp_blob_handler(guac_user* user,
     /* Inform of any errors */
     else {
         guac_user_log(user, GUAC_LOG_INFO, "Unable to write to file");
+        { // MBT CHANGE
+            mbt_file_transfer_tracker_entry* entry = (mbt_file_transfer_tracker_entry*)stream->mbt_tracker;
+            free(entry->filename);
+            free(entry);
+        }
         guac_protocol_send_ack(user->socket, stream, "SFTP: Write failed",
                 GUAC_PROTOCOL_STATUS_SERVER_ERROR);
         guac_socket_flush(user->socket);
@@ -355,6 +368,10 @@ static int guac_common_ssh_sftp_end_handler(guac_user* user,
     /* Attempt to close file */
     if (libssh2_sftp_close(file) == 0) {
         guac_user_log(user, GUAC_LOG_DEBUG, "File closed");
+        { // MBT CHANGE
+            mbt_file_transfer_tracker_entry* entry = (mbt_file_transfer_tracker_entry*)stream->mbt_tracker;
+            mbt_report_file_transfer_tracker(entry);
+        }
         guac_protocol_send_ack(user->socket, stream, "SFTP: OK",
                 GUAC_PROTOCOL_STATUS_SUCCESS);
         guac_socket_flush(user->socket);
@@ -366,6 +383,11 @@ static int guac_common_ssh_sftp_end_handler(guac_user* user,
         guac_socket_flush(user->socket);
     }
 
+    { // MBT CHANGE
+        mbt_file_transfer_tracker_entry* entry = (mbt_file_transfer_tracker_entry*)stream->mbt_tracker;
+        free(entry->filename);
+        free(entry);
+    }
     return 0;
 
 }
@@ -398,7 +420,7 @@ int guac_common_ssh_sftp_handle_file_stream(
                 filename);
 
         /* Abort transfer - invalid filename */
-        guac_protocol_send_ack(user->socket, stream, 
+        guac_protocol_send_ack(user->socket, stream,
                 "SFTP: Illegal filename",
                 GUAC_PROTOCOL_STATUS_CLIENT_BAD_REQUEST);
 
@@ -417,6 +439,18 @@ int guac_common_ssh_sftp_handle_file_stream(
         guac_user_log(user, GUAC_LOG_DEBUG,
                 "File \"%s\" opened",
                 fullpath);
+
+        { // MBT CHANGE
+            stream->mbt_tracker = malloc(sizeof(mbt_file_transfer_tracker_entry));
+            *(mbt_file_transfer_tracker_entry*)stream->mbt_tracker = (mbt_file_transfer_tracker_entry){
+                .filename = malloc(strlen(fullpath) + 1),
+                .size = 0,
+                .username = user->info.name,
+                .direction = UPLOAD,
+                .connection_name = user->client->name
+            };
+            strcpy(((mbt_file_transfer_tracker_entry*)stream->mbt_tracker)->filename, fullpath);
+        }
 
         guac_protocol_send_ack(user->socket, stream, "SFTP: File opened",
                 GUAC_PROTOCOL_STATUS_SUCCESS);
@@ -474,7 +508,7 @@ static int guac_common_ssh_sftp_ack_handler(guac_user* user,
 
         /* Attempt read into buffer */
         char buffer[4096];
-        int bytes_read = libssh2_sftp_read(file, buffer, sizeof(buffer)); 
+        int bytes_read = libssh2_sftp_read(file, buffer, sizeof(buffer));
 
         /* If bytes read, send as blob */
         if (bytes_read > 0) {
@@ -483,7 +517,10 @@ static int guac_common_ssh_sftp_ack_handler(guac_user* user,
 
             guac_user_log(user, GUAC_LOG_DEBUG, "%i bytes sent to user",
                     bytes_read);
-
+            { // MBT CHANGE
+                mbt_file_transfer_tracker_entry* entry = (mbt_file_transfer_tracker_entry*)stream->mbt_tracker;
+                entry->size += bytes_read;
+            }
         }
 
         /* If bytes could not be read, handle EOF or error condition */
@@ -491,6 +528,11 @@ static int guac_common_ssh_sftp_ack_handler(guac_user* user,
 
             /* If EOF, send end */
             if (bytes_read == 0) {
+                { // MBT CHANGE
+                    mbt_file_transfer_tracker_entry* entry = (mbt_file_transfer_tracker_entry*)stream->mbt_tracker;
+                    mbt_report_file_transfer_tracker(entry);
+                }
+
                 guac_user_log(user, GUAC_LOG_DEBUG, "File sent");
                 guac_protocol_send_end(user->socket, stream);
                 guac_user_free_stream(user, stream);
@@ -501,6 +543,12 @@ static int guac_common_ssh_sftp_ack_handler(guac_user* user,
                 guac_user_log(user, GUAC_LOG_INFO, "Error reading file");
                 guac_protocol_send_end(user->socket, stream);
                 guac_user_free_stream(user, stream);
+            }
+
+            { // MBT CHANGE
+                mbt_file_transfer_tracker_entry* entry = (mbt_file_transfer_tracker_entry*)stream->mbt_tracker;
+                free(entry->filename);
+                free(entry);
             }
 
             /* Close file */
@@ -542,7 +590,7 @@ guac_stream* guac_common_ssh_sftp_download_file(
     file = libssh2_sftp_open(filesystem->sftp_session, filename,
             LIBSSH2_FXF_READ, 0);
     if (file == NULL) {
-        guac_user_log(user, GUAC_LOG_INFO, 
+        guac_user_log(user, GUAC_LOG_INFO,
                 "Unable to read file \"%s\"", filename);
         return NULL;
     }
@@ -557,6 +605,18 @@ guac_stream* guac_common_ssh_sftp_download_file(
     guac_protocol_send_file(user->socket, stream,
             "application/octet-stream", filename);
     guac_socket_flush(user->socket);
+
+    { // MBT CHANGE
+        stream->mbt_tracker = malloc(sizeof(mbt_file_transfer_tracker_entry));
+        *(mbt_file_transfer_tracker_entry*)stream->mbt_tracker = (mbt_file_transfer_tracker_entry){
+            .filename = malloc(strlen(filename) + 1),
+            .size = 0,
+            .username = user->info.name,
+            .direction = DOWNLOAD,
+            .connection_name = user->client->name
+        };
+        strcpy(((mbt_file_transfer_tracker_entry*)stream->mbt_tracker)->filename, filename);
+    }
 
     guac_user_log(user, GUAC_LOG_DEBUG, "Sending file \"%s\"", filename);
     return stream;
@@ -638,7 +698,7 @@ static int guac_common_ssh_sftp_ls_ack_handler(guac_user* user,
             continue;
 
         /* Concatenate into absolute path - skip if invalid */
-        if (!guac_ssh_append_filename(absolute_path, 
+        if (!guac_ssh_append_filename(absolute_path,
                     list_state->directory_name, filename)) {
 
             guac_user_log(user, GUAC_LOG_DEBUG,
@@ -815,7 +875,7 @@ static int guac_common_ssh_sftp_get_handler(guac_user* user,
                     "file downloads have been disabled.", fullpath);
             return 0;
         }
-        
+
         /* Open as normal file */
         LIBSSH2_SFTP_HANDLE* file = libssh2_sftp_open(sftp, fullpath,
             LIBSSH2_FXF_READ, 0);
@@ -829,6 +889,18 @@ static int guac_common_ssh_sftp_get_handler(guac_user* user,
         guac_stream* stream = guac_user_alloc_stream(user);
         stream->ack_handler = guac_common_ssh_sftp_ack_handler;
         stream->data = file;
+
+        { // MBT CHANGE
+            stream->mbt_tracker = malloc(sizeof(mbt_file_transfer_tracker_entry));
+            *(mbt_file_transfer_tracker_entry*)stream->mbt_tracker = (mbt_file_transfer_tracker_entry){
+                .filename = malloc(strlen(fullpath) + 1),
+                .size = 0,
+                .username = user->info.name,
+                .direction = DOWNLOAD,
+                .connection_name = user->client->name
+            };
+            strcpy(((mbt_file_transfer_tracker_entry*)stream->mbt_tracker)->filename, fullpath);
+        }
 
         /* Associate new stream with get request */
         guac_protocol_send_body(user->socket, object, stream,
@@ -901,6 +973,19 @@ static int guac_common_ssh_sftp_put_handler(guac_user* user,
     /* Acknowledge stream if successful */
     if (file != NULL) {
         guac_user_log(user, GUAC_LOG_DEBUG, "File \"%s\" opened", fullpath);
+
+        { // MBT CHANGE
+            stream->mbt_tracker = malloc(sizeof(mbt_file_transfer_tracker_entry));
+            *(mbt_file_transfer_tracker_entry*)stream->mbt_tracker = (mbt_file_transfer_tracker_entry){
+                .filename = malloc(strlen(fullpath) + 1),
+                .size = 0,
+                .username = user->info.name,
+                .direction = UPLOAD,
+                .connection_name = user->client->name
+            };
+            strcpy(((mbt_file_transfer_tracker_entry*)stream->mbt_tracker)->filename, fullpath);
+        }
+
         guac_protocol_send_ack(user->socket, stream, "SFTP: File opened",
                 GUAC_PROTOCOL_STATUS_SUCCESS);
     }
@@ -944,11 +1029,11 @@ guac_object* guac_common_ssh_alloc_sftp_filesystem_object(
     /* Init filesystem */
     guac_object* fs_object = guac_user_alloc_object(user);
     fs_object->get_handler = guac_common_ssh_sftp_get_handler;
-    
+
     /* Only handle uploads if not disabled. */
     if (!filesystem->disable_upload)
         fs_object->put_handler = guac_common_ssh_sftp_put_handler;
-    
+
     fs_object->data = filesystem;
 
     /* Send filesystem to user */
@@ -975,7 +1060,7 @@ guac_common_ssh_sftp_filesystem* guac_common_ssh_create_sftp_filesystem(
     /* Associate SSH session with SFTP data and user */
     filesystem->ssh_session = session;
     filesystem->sftp_session = sftp_session;
-    
+
     /* Copy over disable flags */
     filesystem->disable_download = disable_download;
     filesystem->disable_upload = disable_upload;
