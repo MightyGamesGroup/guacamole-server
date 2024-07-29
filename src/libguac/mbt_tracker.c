@@ -49,6 +49,7 @@ FILE* mbt_tracker_open_csv(const char* filename_format, const char* header)
 		}
 
 		fputs(header, log_file_fd);
+		fputc('\n', log_file_fd);
 		return log_file_fd;
 	}
 	return fopen(csv_file_path, "a");

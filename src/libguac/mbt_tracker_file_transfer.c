@@ -57,7 +57,7 @@ void mbt_report_file_transfer_tracker(const mbt_file_transfer_tracker_entry* ent
 	int size = stringify_entry(entry_str, entry);
 
 	FILE* output_csv =
-		mbt_tracker_open_csv("file_transfer-%s.csv", "Timestamp, Connection, Username, Direction, Filename, Size\n");
+		mbt_tracker_open_csv("file_transfer-%s.csv", "Date, Connection, User, Direction, FilePath, Size");
 	if (output_csv == NULL) {
 		return;
 	}
