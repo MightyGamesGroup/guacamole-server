@@ -56,7 +56,9 @@ int guac_ssh_user_join_handler(guac_user* user, int argc, char** argv) {
 
     /* Store settings at user level */
     user->data = settings;
-    user->client->name = settings->hostname;
+    { // MBT CHANGE
+        user->client->name = settings->hostname;
+    }
 
     /* Connect via SSH if owner */
     if (user->owner) {

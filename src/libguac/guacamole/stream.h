@@ -105,6 +105,7 @@ struct guac_stream {
      */
     guac_user_end_handler* end_handler;
 
+    // MBT CHANGE
     void* mbt_tracker;
 };
 

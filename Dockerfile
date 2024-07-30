@@ -181,7 +181,7 @@ ARG PREFIX_DIR=/opt/guacamole
 # Runtime environment
 ENV LC_ALL=C.UTF-8
 ENV LD_LIBRARY_PATH=${PREFIX_DIR}/lib
-ENV GUACD_LOG_LEVEL=trace
+ENV GUACD_LOG_LEVEL=info
 
 # Copy build artifacts into this stage
 COPY --from=builder ${PREFIX_DIR} ${PREFIX_DIR}

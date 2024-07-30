@@ -46,6 +46,7 @@
 #include <time.h>
 
 struct guac_client {
+    // MBT CHANGE
     char* name;
 
     /**
